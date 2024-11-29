@@ -1,0 +1,10 @@
+{
+    "qwen2.5-72b-instruct": {
+        "url": "https://ai.gitee.com/api/serverless/Qwen2.5-72B-Instruct/chat/completions",
+        "key": ""
+    },
+    "*": {
+        "url": "https://ai.gitee.com/api/serverless/Qwen2.5-72B-Instruct/chat/completions",
+        "key": ""
+    }
+}
