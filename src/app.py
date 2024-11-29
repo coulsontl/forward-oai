@@ -57,6 +57,8 @@ def create_options_response():
 def prepare_url(body):
     model = body.get("model")
     url = app_config.get(model, app_config.get("*", {})).get("url")
+    logging.info(f"url: {url}")
+
     return url
 
 def prepare_data(body):
