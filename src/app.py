@@ -5,8 +5,7 @@ import time
 from aiohttp import ClientSession, web
 from dotenv import load_dotenv
 import logging
-import threading
-import chardet
+import uuid
 
 # 加载环境变量
 load_dotenv()
@@ -39,11 +38,23 @@ async def fetch(req, is_chat):
         model = '*'
         if req.can_read_body:
             content_type = req.content_type.lower()
+            logging.info(f"content_type: {content_type}")
             if content_type.startswith('application/json'):
                 body = await req.json()
                 model = body.get("model", '*')
-            else:
+            elif content_type.startswith('text/'):
                 body = await req.text()
+            elif content_type.startswith('multipart/') or content_type.startswith('application/octet-stream'):
+                unique_filename = f'uploaded_file_{uuid.uuid4().hex}'
+                try:
+                    body = await req.read()
+                    with open(unique_filename, 'wb') as f:
+                        f.write(body)
+                    logging.info(f"Binary data received and saved as '{unique_filename}'")
+                finally:
+                    if os.path.exists(unique_filename):
+                        os.remove(unique_filename)
+                    logging.info(f"Temporary file '{unique_filename}' deleted")
         token = get_request_token(req)
         config = app_config.get(token, app_config.get("*", {}))
         # logging.info(f"config: {config}")
@@ -54,14 +65,13 @@ async def fetch(req, is_chat):
             url = prepare_other_url(req, config)
         if url is None or url == "":
             raise ValueError("config.json中没有配置模型对应的URL")
-        
         data = prepare_data(body, config)
         headers = prepare_headers(req, model, config, is_chat)
         response = await post_request(url, data, headers, req)
         return response
     except Exception as e:
         logging.error(f"Error processing request: {str(e)}")
-        return web.Response(text=str(e), status=500)
+        return web.Response(text=str(e), status=429)
 
 def get_request_token(req):
     auth_header = req.headers.get('authorization') or req.headers.get('Authorization')
@@ -128,7 +138,14 @@ async def send_request(session, url, data, headers, req):
         logging.error(f"Unsupported HTTP method: {req.method}")
         return None
 
-    async with request_method(url, json=data, headers=headers, proxy=http_proxy or https_proxy) as resp:
+    # Determine if data should be sent as JSON or raw bytes
+    request_args = {'headers': headers, 'proxy': http_proxy or https_proxy}
+    if isinstance(data, bytes):
+        request_args['data'] = data
+    else:
+        request_args['json'] = data
+    
+    async with request_method(url, **request_args) as resp:
         if resp.status != 200:
             response_text = await resp.text()
             logging.error(f"Error from API: Status: {resp.status}, Body: {response_text}")
@@ -136,7 +153,7 @@ async def send_request(session, url, data, headers, req):
         return await handle_response(data, resp, req)
 
 async def handle_response(data, resp, req):
-    if data == None or not data.get("stream"):
+    if data is None or not isinstance(data, dict) or not data.get("stream"):
         body = await resp.read()
         response = web.Response(
             body=body,
