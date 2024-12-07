@@ -44,17 +44,13 @@ async def fetch(req, is_chat):
                 model = body.get("model", '*')
             elif content_type.startswith('text/'):
                 body = await req.text()
+            elif content_type.startswith('application/x-www-form-urlencoded'):
+                body = await req.post()
             elif content_type.startswith('multipart/') or content_type.startswith('application/octet-stream'):
-                unique_filename = f'uploaded_file_{uuid.uuid4().hex}'
-                try:
-                    body = await req.read()
-                    with open(unique_filename, 'wb') as f:
-                        f.write(body)
-                    logging.info(f"Binary data received and saved as '{unique_filename}'")
-                finally:
-                    if os.path.exists(unique_filename):
-                        os.remove(unique_filename)
-                    logging.info(f"Temporary file '{unique_filename}' deleted")
+                body = await handle_binary_data(req)
+            else:
+                logging.warning("Unsupported or missing content type, reading as binary")
+                body = await handle_binary_data(req)
         token = get_request_token(req)
         config = app_config.get(token, app_config.get("*", {}))
         # logging.info(f"config: {config}")
@@ -72,6 +68,19 @@ async def fetch(req, is_chat):
     except Exception as e:
         logging.error(f"Error processing request: {str(e)}")
         return web.Response(text=str(e), status=429)
+
+async def handle_binary_data(req):
+    unique_filename = f'uploaded_file_{uuid.uuid4().hex}'
+    try:
+        body = await req.read()
+        with open(unique_filename, 'wb') as f:
+            f.write(body)
+        logging.info(f"Binary data received and saved as '{unique_filename}'")
+    finally:
+        if os.path.exists(unique_filename):
+            os.remove(unique_filename)
+        logging.info(f"Temporary file '{unique_filename}' deleted")
+    return body
 
 def get_request_token(req):
     auth_header = req.headers.get('authorization') or req.headers.get('Authorization')
