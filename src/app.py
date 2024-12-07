@@ -30,45 +30,80 @@ try:
 except FileNotFoundError:
     app_config = {}
 
-async def fetch(req):
+async def fetch(req, is_chat):
     if req.method == "OPTIONS":
         return create_options_response()
 
     try:
-        body = await req.json()
-        url = prepare_url(body)
+        body = None
+        model = '*'
+        if req.can_read_body:
+            content_type = req.content_type.lower()
+            if content_type.startswith('application/json'):
+                body = await req.json()
+                model = body.get("model", '*')
+            else:
+                body = await req.text()
+        token = get_request_token(req)
+        config = app_config.get(token, app_config.get("*", {}))
+        # logging.info(f"config: {config}")
+
+        if is_chat:
+            url = prepare_chat_url(body, config)
+        else:
+            url = prepare_other_url(req, config)
         if url is None or url == "":
             raise ValueError("config.json中没有配置模型对应的URL")
         
-        data = prepare_data(body)
-        headers = prepare_headers(req, body)
+        data = prepare_data(body, config)
+        headers = prepare_headers(req, model, config)
         response = await post_request(url, data, headers, req)
         return response
     except Exception as e:
         logging.error(f"Error processing request: {str(e)}")
         return web.Response(text=str(e), status=500)
 
+def get_request_token(req):
+    auth_header = req.headers.get('authorization')
+    if auth_header:
+        parts = auth_header.split()
+        # 检查是否有两个部分，并且第一个部分是 'Bearer'（不区分大小写）
+        if len(parts) == 2 and parts[0].lower() == 'bearer':
+            token = parts[1]
+        else:
+            print("Invalid authorization header format.")
+    else:
+        print("Authorization header is missing.")
+    return token
+
 def create_options_response():
     return web.Response(body="", headers={
-        'Access-Control-Allow-Origin': '*', 
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': '*'
     }, status=204)
 
-def prepare_url(body):
+def prepare_chat_url(body, config):
     model = body.get("model")
-    url = app_config.get(model, app_config.get("*", {})).get("url")
+    logging.info(f"model: {model}")
+    url = config.get(model, config.get("*", {})).get("chat-url")
     logging.info(f"url: {url}")
-
     return url
 
-def prepare_data(body):
+def prepare_other_url(req, config):
+    domain = config.get('*', {}).get("domain")
+    logging.info(f"url: {domain + req.path}")
+    return domain + req.path
+
+def prepare_data(body, config):
     # logging.info(f"prepare data with body: {body}")
     return body
 
-def prepare_headers(req, body):
-    headers = {'Content-Type': 'application/json; charset=utf-8', 'Accept': '*/*', 'Accept-Encoding': 'gzip, deflate, br, zstd', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'}
-    model = body.get("model")
-    key = app_config.get(model, app_config.get("*", {})).get("key")
+def prepare_headers(req, model, config):
+    headers = dict(req.headers)
+    headers.pop('Host', None)
+    headers.pop('Content-Length', None)
+    # headers = {'Content-Type': 'application/json; charset=utf-8', 'Accept': '*/*', 'Accept-Encoding': 'gzip, deflate, br, zstd', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'}
+    key = config.get(model, {}).get("key") or config.get('*', {}).get("key")
     if key is None or key == "":
         authorization = req.headers.get('authorization')
     else:
@@ -92,20 +127,17 @@ async def send_request(session, url, data, headers, req):
 
 async def handle_response(data, resp, req):
     if not data.get("stream"):
-        response_json = await resp.json()
-        return create_response(data, response_json)
+        body = await resp.read()
+        response = web.Response(
+            body=body,
+            status=resp.status,
+            headers=resp.headers
+        )
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Headers'] = '*'
+        return response
     else:
         return await stream_response(resp, data, req)
-
-def create_response(data, response_json):
-    return web.Response(
-        text=json.dumps(response_json, ensure_ascii=False),
-        content_type='application/json',
-        headers={
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': '*',
-        }
-    )
 
 async def stream_response(resp, data, req):
     writer = web.StreamResponse()
@@ -120,11 +152,15 @@ async def stream_response(resp, data, req):
     await writer.write_eof()
     return writer
 
-async def onRequest(request):
-    return await fetch(request)
+async def onChatRequest(request):
+    return await fetch(request, True)
+
+async def onOtherRequest(request):
+    return await fetch(request, False)
 
 app = web.Application()
-app.router.add_route("*", "/v1/chat/completions", onRequest)
+app.router.add_route("*", "/v1/chat/completions", onChatRequest)
+app.router.add_route("*", "/{tail:.*}", onOtherRequest)
 
 if __name__ == '__main__':
     port = int(get_env_value('SERVER_PORT', 3030))
