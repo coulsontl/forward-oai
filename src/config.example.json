@@ -1,5 +1,11 @@
 {
-    "*": {},
+    "*": {
+        "*": {
+            "domain": "https://api.openai.com",
+            "chat-url": "https://api.openai.com/v1/chat/completions",
+            "key": "xxxxx"
+        }
+    },
     "gitee": {
         "Qwen2.5-72B-Instruct": {
             "chat-url": "https://ai.gitee.com/api/serverless/Qwen2.5-72B-Instruct/chat/completions"
@@ -7,7 +13,7 @@
         "*": {
             "domain": "https://ai.gitee.com",
             "chat-url": "https://ai.gitee.com/v1/chat/completions",
-            "key": "xxxxxx"
+            "key": "xxxxx"
         }
     }
 }
