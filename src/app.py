@@ -56,7 +56,7 @@ async def fetch(req, is_chat):
             raise ValueError("config.json中没有配置模型对应的URL")
         
         data = prepare_data(body, config)
-        headers = prepare_headers(req, model, config)
+        headers = prepare_headers(req, model, config, is_chat)
         response = await post_request(url, data, headers, req)
         return response
     except Exception as e:
@@ -98,7 +98,7 @@ def prepare_data(body, config):
     # logging.info(f"prepare data with body: {body}")
     return body
 
-def prepare_headers(req, model, config):
+def prepare_headers(req, model, config, is_chat):
     headers = dict(req.headers)
     headers.pop('Host', None)
     headers.pop('Content-Length', None)
@@ -107,7 +107,10 @@ def prepare_headers(req, model, config):
     if key is None or key == "":
         authorization = req.headers.get('authorization')
     else:
-        authorization = f"Bearer {key}"
+        if is_chat == False and key.endswith("-ca"):
+            authorization = f"Bearer {key[:-3]}"
+        else:
+            authorization = f"Bearer {key}"
     headers["Authorization"] = authorization
     logging.info(f"headers: {headers}")
 
