@@ -64,7 +64,7 @@ async def fetch(req, is_chat):
         return web.Response(text=str(e), status=500)
 
 def get_request_token(req):
-    auth_header = req.headers.get('authorization')
+    auth_header = req.headers.get('authorization') or req.headers.get('Authorization')
     if auth_header:
         parts = auth_header.split()
         # 检查是否有两个部分，并且第一个部分是 'Bearer'（不区分大小写）
@@ -121,7 +121,14 @@ async def post_request(url, data, headers, req):
         return await send_request(session, url, data, headers, req)
 
 async def send_request(session, url, data, headers, req):
-    async with session.post(url, json=data, headers=headers, proxy=http_proxy or https_proxy) as resp:
+    method = req.method.lower()
+    request_method = getattr(session, method, None)
+
+    if request_method is None:
+        logging.error(f"Unsupported HTTP method: {req.method}")
+        return None
+
+    async with request_method(url, json=data, headers=headers, proxy=http_proxy or https_proxy) as resp:
         if resp.status != 200:
             response_text = await resp.text()
             logging.error(f"Error from API: Status: {resp.status}, Body: {response_text}")
@@ -129,20 +136,22 @@ async def send_request(session, url, data, headers, req):
         return await handle_response(data, resp, req)
 
 async def handle_response(data, resp, req):
-    if not data.get("stream"):
+    if data == None or not data.get("stream"):
         body = await resp.read()
         response = web.Response(
             body=body,
+            content_type=resp.content_type,
             status=resp.status,
-            headers=resp.headers
+            headers={
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': '*'
+            }
         )
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Headers'] = '*'
         return response
     else:
-        return await stream_response(resp, data, req)
+        return await stream_response(resp, req)
 
-async def stream_response(resp, data, req):
+async def stream_response(resp, req):
     writer = web.StreamResponse()
     writer.headers['Access-Control-Allow-Origin'] = '*'
     writer.headers['Access-Control-Allow-Headers'] = '*'
