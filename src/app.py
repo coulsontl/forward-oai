@@ -84,15 +84,16 @@ async def handle_binary_data(req):
 
 def get_request_token(req):
     auth_header = req.headers.get('authorization') or req.headers.get('Authorization')
+    token = None
     if auth_header:
         parts = auth_header.split()
         # 检查是否有两个部分，并且第一个部分是 'Bearer'（不区分大小写）
         if len(parts) == 2 and parts[0].lower() == 'bearer':
             token = parts[1]
         else:
-            print("Invalid authorization header format.")
+            logging.info(f'Invalid authorization header format.')
     else:
-        print("Authorization header is missing.")
+        logging.info('Authorization header is missing.')
     return token
 
 def create_options_response():
@@ -198,6 +199,8 @@ async def onOtherRequest(request):
 
 app = web.Application()
 app.router.add_route("*", "/v1/chat/completions", onChatRequest)
+app.router.add_route("*", "/api/v1/chat/completions", onChatRequest)
+app.router.add_route("*", "/api/paas/v4/chat/completions", onChatRequest)
 app.router.add_route("*", "/{tail:.*}", onOtherRequest)
 
 if __name__ == '__main__':
