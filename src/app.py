@@ -114,11 +114,17 @@ def create_options_response():
 
 def prepare_chat_url(model, config):
     logging.info(f"model: {model}")
-    # 优先使用chat-url
-    url = config.get(model, config.get("*", {})).get("chat-url")
+    model_config = config.get(model, {})
+    default_config = config.get("*", {})
+    # 先尝试从配置中获取 chat-url
+    url = model_config.get("chat-url") or default_config.get("chat-url")
+    # 如果都没有 chat-url，则尝试使用 domain
     if url is None or url == "":
-        # 如果chat-url为空，则使用domain
-        url = config.get(model, config.get("*", {})).get("domain") + "/v1/chat/completions"
+        domain = model_config.get("domain") or default_config.get("domain")
+        if domain is None:
+            logging.error(f"未找到模型 {model} 的 domain 配置")
+            raise ValueError(f"配置错误：模型 {model} 既没有 chat-url 也没有 domain 配置")
+        url = domain + "/v1/chat/completions"
     return url
 
 def prepare_other_url(req, config):
