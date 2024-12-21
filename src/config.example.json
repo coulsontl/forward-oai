@@ -6,13 +6,24 @@
             "key": "xxxxx"
         }
     },
+    "fastgpt": {
+        "flux.1-dev": {
+            "key": "fastgpt-key1"
+        },
+        "flux.1-schnell": {
+            "key": "fastgpt-key2"
+        },
+        "*": {
+            "domain": "http://192.168.31.8:3000/api"
+        }
+    },
     "gitee": {
         "Qwen2.5-72B-Instruct": {
             "chat-url": "https://ai.gitee.com/api/serverless/Qwen2.5-72B-Instruct/chat/completions"
         },
         "*": {
             "domain": "https://ai.gitee.com",
-            "chat-url": "https://ai.gitee.com/v1/chat/completions",
+            "chat-url": "https://ai.gitee.com/api/serverless/{model_name}/chat/completions",
             "key": "xxxxx"
         }
     }

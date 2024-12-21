@@ -6,12 +6,17 @@ from aiohttp import ClientSession, web
 from dotenv import load_dotenv
 import logging
 import uuid
+import threading
 
 # 加载环境变量
 load_dotenv()
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# 在文件顶部添加全局变量和锁
+key_indices = {}
+key_lock = threading.Lock()
 
 # 获取环境变量值，支持大小写不敏感，空值返回默认值。
 def get_env_value(key, default=None):
@@ -56,11 +61,16 @@ async def fetch(req, is_chat):
         # logging.info(f"config: {config}")
 
         if is_chat:
-            url = prepare_chat_url(body, config)
+            url = prepare_chat_url(model, config)
         else:
             url = prepare_other_url(req, config)
         if url is None or url == "":
             raise ValueError("config.json中没有配置模型对应的URL")
+        # 检查URL是否需要替换{model_name}
+        if "{model_name}" in url:
+            url = url.replace("{model_name}", model)
+        logging.info(f"url: {url}")
+        
         data = prepare_data(body, config)
         headers = prepare_headers(req, model, config, is_chat)
         response = await post_request(url, data, headers, req)
@@ -102,16 +112,17 @@ def create_options_response():
         'Access-Control-Allow-Headers': '*'
     }, status=204)
 
-def prepare_chat_url(body, config):
-    model = body.get("model")
+def prepare_chat_url(model, config):
     logging.info(f"model: {model}")
+    # 优先使用chat-url
     url = config.get(model, config.get("*", {})).get("chat-url")
-    logging.info(f"url: {url}")
+    if url is None or url == "":
+        # 如果chat-url为空，则使用domain
+        url = config.get(model, config.get("*", {})).get("domain") + "/v1/chat/completions"
     return url
 
 def prepare_other_url(req, config):
     domain = config.get('*', {}).get("domain")
-    logging.info(f"url: {domain + req.path}")
     return domain + req.path
 
 def prepare_data(body, config):
@@ -127,13 +138,27 @@ def prepare_headers(req, model, config, is_chat):
     if key is None or key == "":
         authorization = req.headers.get('authorization')
     else:
-        if is_chat == False and key.endswith("-ca"):
-            authorization = f"Bearer {key[:-3]}"
+        # 如果key包含逗号，说明是多个key
+        if ',' in key:
+            keys = key.split(',')
+            with key_lock:
+                # 获取当前key pattern的索引，如果不存在则初始化为0
+                current_index = key_indices.get(key, 0)
+                selected_key = keys[current_index].strip()
+                
+                # 更新索引，如果达到最后则重置为0
+                key_indices[key] = (current_index + 1) % len(keys)
         else:
-            authorization = f"Bearer {key}"
+            selected_key = key
+
+        # 适配ChatAnywhere，非Chat接口要去掉后缀-ca
+        if not is_chat and selected_key.endswith("-ca"):
+            authorization = f"Bearer {selected_key[:-3]}"
+        else:
+            authorization = f"Bearer {selected_key}"
+            
     headers["Authorization"] = authorization
     logging.info(f"headers: {headers}")
-
     return headers
 
 async def post_request(url, data, headers, req):
@@ -198,9 +223,7 @@ async def onOtherRequest(request):
     return await fetch(request, False)
 
 app = web.Application()
-app.router.add_route("*", "/v1/chat/completions", onChatRequest)
-app.router.add_route("*", "/api/v1/chat/completions", onChatRequest)
-app.router.add_route("*", "/api/paas/v4/chat/completions", onChatRequest)
+app.router.add_route("*", "/{path:.*}/chat/completions", onChatRequest)
 app.router.add_route("*", "/{tail:.*}", onOtherRequest)
 
 if __name__ == '__main__':
