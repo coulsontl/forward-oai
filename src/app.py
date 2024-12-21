@@ -134,9 +134,9 @@ def prepare_other_url(req, model, config):
     if domain is None:
         logging.error(f"未找到模型 {model} 的 domain 配置")
         raise ValueError(f"配置错误：模型 {model} 既没有 chat-url 也没有 domain 配置")
-    path_redirect = model_config.get("path_redirect") or default_config.get("path_redirect")
-    if path_redirect is not None and path_redirect.get(req.path):
-        return domain + path_redirect[req.path]
+    redirect_cfg = model_config.get("redirect") or default_config.get("redirect")
+    if redirect_cfg is not None and redirect_cfg.get(req.path):
+        return domain + redirect_cfg[req.path]
     return domain + req.path
 
 def prepare_data(body, config):
