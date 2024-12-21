@@ -3,7 +3,7 @@
         "*": {
             "domain": "https://api.openai.com",
             "chat-url": "https://api.openai.com/v1/chat/completions",
-            "key": "xxxxx"
+            "key": "xxxxx1,xxxxx2"
         }
     },
     "fastgpt": {
@@ -24,7 +24,7 @@
         "*": {
             "domain": "https://ai.gitee.com",
             "chat-url": "https://ai.gitee.com/api/serverless/{model_name}/chat/completions",
-            "key": "xxxxx"
+            "key": "xxxxx1,xxxxx2"
         }
     }
 }
