@@ -61,9 +61,9 @@ async def fetch(req, is_chat):
         # logging.info(f"config: {config}")
 
         if is_chat:
-            url = prepare_chat_url(model, config)
+            url = prepare_chat_url(req, model, config)
         else:
-            url = prepare_other_url(req, config)
+            url = prepare_other_url(req, model, config)
         if url is None or url == "":
             raise ValueError("config.json中没有配置模型对应的URL")
         # 检查URL是否需要替换{model_name}
@@ -112,7 +112,7 @@ def create_options_response():
         'Access-Control-Allow-Headers': '*'
     }, status=204)
 
-def prepare_chat_url(model, config):
+def prepare_chat_url(req, model, config):
     logging.info(f"model: {model}")
     model_config = config.get(model, {})
     default_config = config.get("*", {})
@@ -127,8 +127,16 @@ def prepare_chat_url(model, config):
         url = domain + "/v1/chat/completions"
     return url
 
-def prepare_other_url(req, config):
-    domain = config.get('*', {}).get("domain")
+def prepare_other_url(req, model, config):
+    model_config = config.get(model, {})
+    default_config = config.get("*", {})
+    domain = model_config.get("domain") or default_config.get("domain")
+    if domain is None:
+        logging.error(f"未找到模型 {model} 的 domain 配置")
+        raise ValueError(f"配置错误：模型 {model} 既没有 chat-url 也没有 domain 配置")
+    path_redirect = model_config.get("path_redirect") or default_config.get("path_redirect")
+    if path_redirect is not None and path_redirect.get(req.path):
+        return domain + path_redirect[req.path]
     return domain + req.path
 
 def prepare_data(body, config):

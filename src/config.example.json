@@ -24,7 +24,10 @@
         "*": {
             "domain": "https://ai.gitee.com",
             "chat-url": "https://ai.gitee.com/api/serverless/{model_name}/chat/completions",
-            "key": "xxxxx1,xxxxx2"
+            "key": "xxxxx1,xxxxx2",
+            "path_redirect": {
+                "/v1/audio/speech": "/models/{model_name}"
+            }
         }
     }
 }
