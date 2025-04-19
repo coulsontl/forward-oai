@@ -196,9 +196,18 @@ async def send_request(session, url, data, headers, req):
     
     async with request_method(url, **request_args) as resp:
         if resp.status != 200:
-            response_text = await resp.text()
-            logging.error(f"Error from API: Status: {resp.status}, Body: {response_text}")
-            return resp
+            response_body = await resp.read()
+            logging.error(f"Error from API: Status: {resp.status}, Body: {response_body.decode('utf-8', errors='ignore')}")
+            # 直接返回上游API的错误信息和状态码，保持原始格式
+            return web.Response(
+                body=response_body,
+                content_type=resp.content_type,
+                status=resp.status,
+                headers={
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Headers': '*'
+                }
+            )
         return await handle_response(data, resp, req)
 
 async def handle_response(data, resp, req):
